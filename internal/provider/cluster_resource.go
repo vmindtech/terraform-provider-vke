@@ -179,7 +179,6 @@ func (r *clusterResource) Create(ctx context.Context, req resource.CreateRequest
 	}
 
 	createTO := plan.createTimeout()
-	deleteTO := plan.deleteTimeout()
 
 	apiReq := client.CreateClusterRequest{
 		ClusterName:              plan.Name.ValueString(),
@@ -204,8 +203,6 @@ func (r *clusterResource) Create(ctx context.Context, req resource.CreateRequest
 
 	plan.ID = types.StringValue(out.ClusterUUID)
 	plan.Status = types.StringValue(out.ClusterStatus)
-	plan.CreateTimeoutMinutes = types.Int64Value(createTO)
-	plan.DeleteTimeoutMinutes = types.Int64Value(deleteTO)
 
 	if err := r.waitClusterActive(ctx, out.ClusterUUID, time.Duration(createTO)*time.Minute); err != nil {
 		resp.Diagnostics.AddError("Cluster did not become ready", err.Error())
