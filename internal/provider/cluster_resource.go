@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 	"time"
 
@@ -301,12 +302,40 @@ func (r *clusterResource) Delete(ctx context.Context, req resource.DeleteRequest
 	}
 }
 
+// transientClusterPollError returns true when GetCluster failed but polling should continue
+// (e.g. VKE occasionally returns 5xx/422 while the cluster is still provisioning).
+func transientClusterPollError(err error) bool {
+	var h client.HTTPStatusError
+	if !errors.As(err, &h) {
+		return false
+	}
+	switch h.StatusCode {
+	case http.StatusTooManyRequests: // 429
+		return true
+	case http.StatusInternalServerError, http.StatusBadGateway,
+		http.StatusServiceUnavailable, http.StatusGatewayTimeout:
+		return true
+	case http.StatusUnprocessableEntity: // 422 — some deployments wrap transient backend errors here
+		return true
+	default:
+		return false
+	}
+}
+
 func (r *clusterResource) waitClusterActive(ctx context.Context, id string, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
 	tick := 30 * time.Second
 	for {
 		cl, err := r.client.GetCluster(ctx, id)
 		if err != nil {
+			if transientClusterPollError(err) && time.Now().Before(deadline) {
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case <-time.After(tick):
+				}
+				continue
+			}
 			return err
 		}
 		if strings.EqualFold(cl.ClusterStatus, client.ClusterStatusActive) {
