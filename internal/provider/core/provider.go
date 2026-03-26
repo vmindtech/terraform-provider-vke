@@ -53,7 +53,11 @@ func (p *portvmindProvider) Schema(_ context.Context, _ provider.SchemaRequest, 
 				Optional:    true,
 			},
 			"tenant_name": schema.StringAttribute{
-				Description: "Project (tenant) name.",
+				Description: "Keystone project (tenant) name for token scope. Use tenant_name or project_id, not both.",
+				Optional:    true,
+			},
+			"project_id": schema.StringAttribute{
+				Description: "Keystone project (tenant) UUID for token scope (OpenStack-style scope.project.id). Use tenant_name or project_id, not both.",
 				Optional:    true,
 			},
 			"project_domain_name": schema.StringAttribute{
@@ -102,7 +106,7 @@ func (p *portvmindProvider) Configure(ctx context.Context, req provider.Configur
 	if !passwordMode && !appCredMode {
 		resp.Diagnostics.AddError(
 			"Invalid provider configuration",
-			"Either password (user_name, password, user_domain_name, tenant_name) or application_credential_id + application_credential_secret is required.",
+			"Either password authentication (user_name, password, user_domain_name, and exactly one of tenant_name or project_id) or application_credential_id + application_credential_secret is required.",
 		)
 		return
 	}
@@ -115,16 +119,26 @@ func (p *portvmindProvider) Configure(ctx context.Context, req provider.Configur
 		Password:                    config.Password.ValueString(),
 		UserDomainName:              config.UserDomainName.ValueString(),
 		TenantName:                  config.TenantName.ValueString(),
+		ProjectID:                   config.ProjectID.ValueString(),
 		ProjectDomainName:           config.ProjectDomainName.ValueString(),
 		ApplicationCredentialID:     config.ApplicationCredentialID.ValueString(),
 		ApplicationCredentialSecret: config.ApplicationCredentialSecret.ValueString(),
 	}
 
 	if passwordMode {
-		if cfg.Password == "" || cfg.UserDomainName == "" || cfg.TenantName == "" {
+		if cfg.Password == "" || cfg.UserDomainName == "" {
 			resp.Diagnostics.AddError(
 				"Invalid provider configuration",
-				"For password authentication, user_name, password, user_domain_name, and tenant_name are required.",
+				"For password authentication, user_name, password, and user_domain_name are required.",
+			)
+			return
+		}
+		hasTenant := cfg.TenantName != ""
+		hasProjectID := cfg.ProjectID != ""
+		if hasTenant == hasProjectID {
+			resp.Diagnostics.AddError(
+				"Invalid provider configuration",
+				"For password authentication, set exactly one of tenant_name or project_id for Keystone project scope.",
 			)
 			return
 		}
@@ -170,6 +184,7 @@ type providerModel struct {
 	Password                    types.String `tfsdk:"password"`
 	UserDomainName              types.String `tfsdk:"user_domain_name"`
 	TenantName                  types.String `tfsdk:"tenant_name"`
+	ProjectID                   types.String `tfsdk:"project_id"`
 	ProjectDomainName           types.String `tfsdk:"project_domain_name"`
 	ApplicationCredentialID     types.String `tfsdk:"application_credential_id"`
 	ApplicationCredentialSecret types.String `tfsdk:"application_credential_secret"`

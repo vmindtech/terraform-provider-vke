@@ -19,6 +19,10 @@ type VKEClient struct {
 	baseURL     *url.URL
 	tokenSource *TokenSource
 	httpClient  *http.Client
+
+	// DefaultClusterProjectID is set from the provider's project_id (Keystone scope). When non-empty,
+	// portvmind_vke_cluster may omit project_id and use this value for the VKE create-cluster projectId.
+	DefaultClusterProjectID string
 }
 
 // Config holds client options.
@@ -30,12 +34,13 @@ type Config struct {
 	// AuthURL is OpenStack Identity (Keystone); same as auth_url in the OpenStack provider.
 	AuthURL string
 
-	// Password auth — compatible with OpenStack provider (user_name, password, user_domain_name, tenant_name).
-	UserName         string
-	Password         string
-	UserDomainName   string
-	TenantName       string
-	ProjectDomainName string
+	// Password auth — compatible with OpenStack provider (user_name, password, user_domain_name, and either tenant_name or project_id for scope).
+	UserName            string
+	Password            string
+	UserDomainName      string
+	TenantName          string
+	ProjectID           string // Keystone project scope by ID (alternative to TenantName + ProjectDomainName)
+	ProjectDomainName   string
 
 	// Application credential (instead of password)
 	ApplicationCredentialID     string
@@ -60,11 +65,16 @@ func New(cfg Config) (*VKEClient, error) {
 		return nil, fmt.Errorf("password and application_credential cannot be used together")
 	}
 	if !passwordMode && !appCredMode {
-		return nil, fmt.Errorf("either password (user_name, password, user_domain_name, tenant_name) or application_credential credentials are required")
+		return nil, fmt.Errorf("either password authentication or application_credential credentials are required")
 	}
 	if passwordMode {
-		if cfg.UserDomainName == "" || cfg.TenantName == "" {
-			return nil, fmt.Errorf("user_domain_name and tenant_name are required for password authentication")
+		if cfg.UserDomainName == "" {
+			return nil, fmt.Errorf("user_domain_name is required for password authentication")
+		}
+		hasTenant := cfg.TenantName != ""
+		hasProjectID := cfg.ProjectID != ""
+		if hasTenant == hasProjectID {
+			return nil, fmt.Errorf("for password authentication, set exactly one of tenant_name or project_id for Keystone project scope")
 		}
 	}
 
@@ -94,15 +104,17 @@ func New(cfg Config) (*VKEClient, error) {
 		Password:          cfg.Password,
 		UserDomainName:    cfg.UserDomainName,
 		TenantName:        cfg.TenantName,
+		ProjectID:         cfg.ProjectID,
 		ProjectDomainName: cfg.ProjectDomainName,
 		AppCredID:         cfg.ApplicationCredentialID,
 		AppCredSecret:     cfg.ApplicationCredentialSecret,
 	}
 
 	return &VKEClient{
-		baseURL:     base,
-		tokenSource: ts,
-		httpClient:  httpClient,
+		baseURL:                 base,
+		tokenSource:             ts,
+		httpClient:              httpClient,
+		DefaultClusterProjectID: strings.TrimSpace(cfg.ProjectID),
 	}, nil
 }
 

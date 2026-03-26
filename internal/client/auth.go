@@ -24,6 +24,7 @@ type TokenSource struct {
 	Password          string
 	UserDomainName    string
 	TenantName        string
+	ProjectID         string // Keystone project scope by UUID (mutually exclusive with TenantName in provider)
 	ProjectDomainName string
 
 	// Application credential (alternative to password)
@@ -60,9 +61,26 @@ func (s *TokenSource) Token(ctx context.Context) (string, error) {
 	var err error
 
 	if s.UsePassword {
-		projectDomain := s.ProjectDomainName
-		if projectDomain == "" {
-			projectDomain = "Default"
+		var scope map[string]interface{}
+		if s.ProjectID != "" {
+			scope = map[string]interface{}{
+				"project": map[string]interface{}{
+					"id": s.ProjectID,
+				},
+			}
+		} else {
+			projectDomain := s.ProjectDomainName
+			if projectDomain == "" {
+				projectDomain = "Default"
+			}
+			scope = map[string]interface{}{
+				"project": map[string]interface{}{
+					"name": s.TenantName,
+					"domain": map[string]interface{}{
+						"name": projectDomain,
+					},
+				},
+			}
 		}
 		body := map[string]interface{}{
 			"auth": map[string]interface{}{
@@ -78,14 +96,7 @@ func (s *TokenSource) Token(ctx context.Context) (string, error) {
 						},
 					},
 				},
-				"scope": map[string]interface{}{
-					"project": map[string]interface{}{
-						"name": s.TenantName,
-						"domain": map[string]interface{}{
-							"name": projectDomain,
-						},
-					},
-				},
+				"scope": scope,
 			},
 		}
 		payload, err = json.Marshal(body)

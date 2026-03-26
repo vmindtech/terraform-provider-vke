@@ -1,5 +1,5 @@
 # Example: VKE provider with OpenStack application credentials (no user/password).
-# Do not set user_name, password, user_domain_name, or tenant_name when using this mode.
+# Do not set user_name, password, user_domain_name, tenant_name, or project_id when using this mode.
 # Pass values via TF_VAR_* or a gitignored *.tfvars file.
 
 terraform {

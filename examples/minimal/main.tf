@@ -17,7 +17,18 @@ variable "portvmind_auth_url" { type = string }
 variable "portvmind_user_name" { type = string }
 variable "portvmind_password" { type = string sensitive = true }
 variable "portvmind_user_domain_name" { type = string }
-variable "portvmind_tenant_name" { type = string }
+
+# Keystone project scope: set exactly one of tenant name or project UUID.
+variable "portvmind_tenant_name" {
+  type        = string
+  default     = ""
+  description = "Keystone project (tenant) name."
+}
+variable "portvmind_project_id" {
+  type        = string
+  default     = ""
+  description = "Keystone project UUID for scope.project.id (alternative to portvmind_tenant_name)."
+}
 
 provider "portvmind" {
   endpoint         = var.portvmind_endpoint
@@ -25,7 +36,8 @@ provider "portvmind" {
   user_name        = var.portvmind_user_name
   password         = var.portvmind_password
   user_domain_name = var.portvmind_user_domain_name
-  tenant_name      = var.portvmind_tenant_name
+  tenant_name      = var.portvmind_project_id == "" ? var.portvmind_tenant_name : null
+  project_id       = var.portvmind_project_id != "" ? var.portvmind_project_id : null
 }
 
 # data "portvmind_cluster" "example" {

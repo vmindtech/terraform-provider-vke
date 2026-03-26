@@ -45,8 +45,8 @@ func (r *clusterResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 				},
 			},
 			"project_id": schema.StringAttribute{
-				Description: "OpenStack project UUID (VKE projectId).",
-				Required:    true,
+				Description: "OpenStack project UUID (VKE projectId). If omitted, the provider's project_id (Keystone scope) is used when set; otherwise set this explicitly.",
+				Optional:    true,
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
 				},
@@ -164,6 +164,13 @@ func (r *clusterResource) Create(ctx context.Context, req resource.CreateRequest
 		return
 	}
 
+	projectID, err := r.resolveClusterProjectID(plan.ProjectID, types.StringNull())
+	if err != nil {
+		resp.Diagnostics.AddError("Invalid cluster configuration", err.Error())
+		return
+	}
+	plan.ProjectID = types.StringValue(projectID)
+
 	subnets, d := tfStringListToSlice(ctx, plan.SubnetIDs)
 	resp.Diagnostics.Append(d...)
 	cidrs, d2 := tfStringListToSlice(ctx, plan.AllowedCIDRs)
@@ -176,7 +183,7 @@ func (r *clusterResource) Create(ctx context.Context, req resource.CreateRequest
 
 	apiReq := client.CreateClusterRequest{
 		ClusterName:              plan.Name.ValueString(),
-		ProjectID:                plan.ProjectID.ValueString(),
+		ProjectID:                projectID,
 		KubernetesVersion:        plan.KubernetesVersion.ValueString(),
 		NodeKeyPairName:          plan.NodeKeyPairName.ValueString(),
 		ClusterAPIAccess:         plan.ClusterAPIAccess.ValueString(),
@@ -239,6 +246,9 @@ func (r *clusterResource) Read(ctx context.Context, req resource.ReadRequest, re
 	}
 
 	state.Status = types.StringValue(st.ClusterStatus)
+	if st.ClusterProjectUUID != "" {
+		state.ProjectID = types.StringValue(st.ClusterProjectUUID)
+	}
 
 	if strings.EqualFold(st.ClusterStatus, client.ClusterStatusActive) {
 		kube, err := r.client.GetKubeYAML(ctx, state.ID.ValueString())
@@ -258,6 +268,13 @@ func (r *clusterResource) Update(ctx context.Context, req resource.UpdateRequest
 	if resp.Diagnostics.HasError() {
 		return
 	}
+
+	projectID, err := r.resolveClusterProjectID(plan.ProjectID, state.ProjectID)
+	if err != nil {
+		resp.Diagnostics.AddError("Invalid cluster configuration", err.Error())
+		return
+	}
+	plan.ProjectID = types.StringValue(projectID)
 
 	if !plan.WorkerNodeGroupMinSize.Equal(state.WorkerNodeGroupMinSize) ||
 		!plan.WorkerNodeGroupMaxSize.Equal(state.WorkerNodeGroupMaxSize) {
@@ -394,6 +411,25 @@ func (r *clusterResource) waitClusterActive(ctx context.Context, id string, time
 		case <-time.After(tick):
 		}
 	}
+}
+
+func (r *clusterResource) resolveClusterProjectID(planID, stateID types.String) (string, error) {
+	if !planID.IsNull() && !planID.IsUnknown() {
+		v := strings.TrimSpace(planID.ValueString())
+		if v != "" {
+			return v, nil
+		}
+	}
+	if !stateID.IsNull() && !stateID.IsUnknown() {
+		v := strings.TrimSpace(stateID.ValueString())
+		if v != "" {
+			return v, nil
+		}
+	}
+	if r.client != nil && r.client.DefaultClusterProjectID != "" {
+		return r.client.DefaultClusterProjectID, nil
+	}
+	return "", fmt.Errorf("project_id must be set on portvmind_vke_cluster, or configure project_id on the provider (Keystone project scope)")
 }
 
 func (r *clusterResource) waitClusterGone(ctx context.Context, id string, timeout time.Duration) error {
