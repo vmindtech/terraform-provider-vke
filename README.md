@@ -1,6 +1,6 @@
-# Terraform Provider: PortVMind
+# Terraform Provider: PortvMind
 
-Terraform provider for PortVMind services. The current release includes VKE resources and obtains an OpenStack Keystone token, then sends it to the API as `X-Auth-Token`.
+Terraform provider for PortvMind services. The current release includes VKE resources and obtains an OpenStack Keystone token, then sends it to the API as `X-Auth-Token`.
 
 ## Requirements
 
