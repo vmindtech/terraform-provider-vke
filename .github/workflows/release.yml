@@ -1,0 +1,53 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  goreleaser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      # ghaction-import-gpg skips with no error if gpg_private_key is empty — then signing fails with "No secret key".
+      - name: Require GPG_PRIVATE_KEY secret
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+        run: |
+          if [ -z "$GPG_PRIVATE_KEY" ]; then
+            echo "::error::Repository secret GPG_PRIVATE_KEY is missing or empty. Add an ASCII-armored private key (Settings → Secrets and variables → Actions)."
+            exit 1
+          fi
+
+      - uses: crazy-max/ghaction-import-gpg@v6
+        id: gpg
+        with:
+          gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
+          passphrase: ${{ secrets.GPG_PASSPHRASE }}
+
+      - name: Verify GPG secret key is available
+        run: |
+          gpg --list-secret-keys --keyid-format LONG
+          if [ -z "${{ steps.gpg.outputs.fingerprint }}" ]; then
+            echo "::error::GPG import produced no fingerprint. Check GPG_PRIVATE_KEY format and GPG_PASSPHRASE if the key is passphrase-protected."
+            exit 1
+          fi
+
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

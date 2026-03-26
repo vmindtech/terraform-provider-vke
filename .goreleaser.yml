@@ -1,0 +1,61 @@
+# https://goreleaser.com — release artifacts for the Terraform Registry
+version: 2
+
+project_name: terraform-provider-portvmind
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - env:
+      - CGO_ENABLED=0
+    mod_timestamp: "{{ .CommitTimestamp }}"
+    flags:
+      - -trimpath
+    ldflags:
+      - -s
+      - -w
+    goos:
+      - freebsd
+      - windows
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm
+      - arm64
+    ignore:
+      - goos: darwin
+        goarch: "386"
+      - goos: windows
+        goarch: arm
+    binary: "{{ .ProjectName }}_v{{ .Version }}"
+
+archives:
+  - formats:
+      - zip
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+checksum:
+  extra_files:
+    - glob: terraform-registry-manifest.json
+      name_template: "{{ .ProjectName }}_{{ .Version }}_manifest.json"
+  name_template: "{{ .ProjectName }}_{{ .Version }}_SHA256SUMS"
+  algorithm: sha256
+
+# GPG signing: required by the Terraform Registry (SHA256SUMS + SHA256SUMS.sig).
+# Register the matching public key under Registry → Provider → Signing keys.
+# CI: import key via .github/workflows/release.yml secrets (GPG_PRIVATE_KEY, optional GPG_PASSPHRASE).
+# After a successful import in CI, the keyring has exactly one secret key → default signing works.
+# Local: same, or use `GPG_FINGERPRINT=... goreleaser release` if you have multiple keys (see GoReleaser sign docs).
+signs:
+  - artifacts: checksum
+
+release:
+  extra_files:
+    - glob: terraform-registry-manifest.json
+      name_template: "{{ .ProjectName }}_{{ .Version }}_manifest.json"
+
+changelog:
+  disable: true
