@@ -59,14 +59,87 @@ go build -o terraform-provider-portvmind .
 
 ## Resources
 
-- `portvmind_cluster` — create/destroy cluster; `kubeconfig` after the cluster is Active
-- `portvmind_node_group` — worker node groups
-- `portvmind_cluster` (data source) — read existing cluster metadata
+- `portvmind_vke_cluster` — create/destroy cluster; `kubeconfig` after the cluster is Active
+- `portvmind_vke_node_group` — worker node groups
+- `portvmind_vke_cluster` (data source) — read existing cluster metadata
 
 ## Examples
 
 - `examples/minimal/main.tf` — password auth (aligned with the OpenStack provider variables)
 - `examples/minimal/application_credential/main.tf` — application credential auth
+
+### Anonymized end-to-end example
+
+```hcl
+terraform {
+  required_providers {
+    portvmind = {
+      source  = "vmindtech/portvmind"
+      version = "~> 0.1.1"
+    }
+  }
+}
+
+provider "portvmind" {
+  endpoint = "https://<region>-apigw.portvmind.com/vke/api/v1"
+  auth_url = "https://<region>-apigw.portvmind.com"
+
+  # Option A: password (same variables as the OpenStack provider)
+  user_name        = "<user_name>"
+  password         = "<password>"
+  user_domain_name = "Default"
+  tenant_name      = "<tenant_name>"
+}
+
+resource "portvmind_vke_cluster" "main" {
+  project_id         = "<project_uuid>"
+  name               = "terraform-cluster"
+  kubernetes_version = "<supported_k8s_version>"
+
+  node_key_pair_name = "<keypair_name>"
+  cluster_api_access = "public"
+  subnet_ids = [
+    "<subnet_uuid>",
+  ]
+
+  worker_node_group_min_size   = 2
+  worker_node_group_max_size   = 3
+  worker_instance_flavor_uuid  = "<worker_flavor_uuid>"
+  master_instance_flavor_uuid  = "<master_flavor_uuid>"
+  worker_disk_size_gb          = 50
+  allowed_cidrs                = ["0.0.0.0/0"] # Restrict in production.
+}
+
+resource "local_file" "kubeconfig" {
+  filename        = "${path.module}/kubeconfig.yaml"
+  content         = portvmind_vke_cluster.main.kubeconfig
+  file_permission = "0600"
+}
+
+output "kubeconfig_base64" {
+  description = "Kubeconfig YAML (base64)"
+  value       = base64encode(portvmind_vke_cluster.main.kubeconfig)
+  sensitive   = true
+}
+
+resource "portvmind_vke_node_group" "workers_2" {
+  cluster_id       = portvmind_vke_cluster.main.id
+  name             = "workers-2"
+  node_flavor_uuid = "<node_flavor_uuid>"
+  node_disk_size   = 50
+  min_size         = 1
+  max_size         = 4
+
+  # optional
+  # node_group_labels = [
+  #   "workload=gpu",
+  #   "team=ml",
+  # ]
+  # node_group_taints = [
+  #   "dedicated=worker2:NoSchedule",
+  # ]
+}
+```
 
 ## License
 
