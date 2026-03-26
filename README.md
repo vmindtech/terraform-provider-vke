@@ -119,6 +119,7 @@ terraform apply
 - The `kubeconfig` attribute is returned as a sensitive value.
 - Cluster provisioning can take time depending on infrastructure state.
 - Restrict `allowed_cidrs` according to your security requirements.
+- For **flavor types** (Nova flavor UUIDs), **supported Kubernetes versions**, and other **region-specific or environment-specific values**, refer to the PortvMind community and documentation at [discuss.portvmind.com](https://discuss.portvmind.com).
 
 ## License
 
