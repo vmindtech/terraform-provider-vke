@@ -167,13 +167,19 @@ func (r *clusterResource) ModifyPlan(ctx context.Context, req resource.ModifyPla
 	if r.client == nil {
 		return
 	}
+	// Destroy (and similar) can send a null configuration; decoding the whole resource would error.
+	if req.Config.Raw.IsNull() {
+		return
+	}
 	var config clusterResourceModel
 	resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 	var state clusterResourceModel
-	_ = req.State.Get(ctx, &state)
+	if !req.State.Raw.IsNull() {
+		_ = req.State.Get(ctx, &state)
+	}
 
 	configEmpty := config.ProjectID.IsNull() || config.ProjectID.IsUnknown() || strings.TrimSpace(config.ProjectID.ValueString()) == ""
 	if !configEmpty || r.client.DefaultClusterProjectID == "" {
@@ -371,6 +377,9 @@ func pickDefaultClusterWorkerNodeGroup(groups []client.NodeGroup) (*client.NodeG
 }
 
 func (r *clusterResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
+	if req.State.Raw.IsNull() {
+		return
+	}
 	var state clusterResourceModel
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
